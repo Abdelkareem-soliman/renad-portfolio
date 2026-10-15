@@ -1,0 +1,23 @@
+# Basketball Athlete Portfolio — .gitignore
+
+# ── Secrets (NEVER commit these) ──────────────────
+.streamlit/secrets.toml
+
+# ── Python artifacts ──────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# ── Local assets ──────────────────────────────────
+# (logos/ and images are tracked so they deploy to Streamlit Cloud)
+
+# ── OS files ──────────────────────────────────────
+.DS_Store
+Thumbs.db
