@@ -132,40 +132,48 @@ st.markdown("""
 # ─────────────────────────────────────────────
 #  Database helpers
 # ─────────────────────────────────────────────
-def _try_connect(db_url: str):
-    try:
-        engine = create_engine(db_url, pool_pre_ping=True)
-        with engine.connect() as conn:
-            conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS pg23_stats (
-                    id           SERIAL PRIMARY KEY,
-                    match_date   DATE          NOT NULL,
-                    opponent     VARCHAR(120)  NOT NULL,
-                    minutes      NUMERIC(5,1)  NOT NULL DEFAULT 0,
-                    fg2_made     INT           NOT NULL DEFAULT 0,
-                    fg3_made     INT           NOT NULL DEFAULT 0,
-                    total_points INT           NOT NULL DEFAULT 0,
-                    assists      INT           NOT NULL DEFAULT 0,
-                    rebounds     INT           NOT NULL DEFAULT 0,
-                    steals       INT           NOT NULL DEFAULT 0,
-                    logged_at    TIMESTAMP     NOT NULL DEFAULT NOW()
-                );
-            """))
-            conn.commit()
-        return engine
-    except Exception:
-        return None
-
-
 @st.cache_resource(show_spinner=False)
+def _get_cached_engine(db_url: str):
+    engine = create_engine(db_url, pool_pre_ping=True)
+    with engine.connect() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS pg23_stats (
+                id           SERIAL PRIMARY KEY,
+                match_date   DATE          NOT NULL,
+                opponent     VARCHAR(120)  NOT NULL,
+                minutes      NUMERIC(5,1)  NOT NULL DEFAULT 0,
+                fg2_made     INT           NOT NULL DEFAULT 0,
+                fg3_made     INT           NOT NULL DEFAULT 0,
+                total_points INT           NOT NULL DEFAULT 0,
+                assists      INT           NOT NULL DEFAULT 0,
+                rebounds     INT           NOT NULL DEFAULT 0,
+                steals       INT           NOT NULL DEFAULT 0,
+                logged_at    TIMESTAMP     NOT NULL DEFAULT NOW()
+            );
+        """))
+        conn.commit()
+    return engine
+
+
 def get_engine():
     try:
-        db_url = st.secrets["database"]["url"]
-    except Exception:
+        db_url = st.secrets.get("database", {}).get("url", "").strip()
+    except Exception as e:
+        st.session_state["db_err"] = f"Secrets access error: {e}"
         return None
-    if not db_url or "HOST" in db_url or "PASSWORD" in db_url:
+
+    if not db_url:
+        st.session_state["db_err"] = "No database URL found in Streamlit secrets."
         return None
-    return _try_connect(db_url)
+    if "HOST" in db_url or "PASSWORD" in db_url:
+        st.session_state["db_err"] = "Database URL still contains placeholder text."
+        return None
+
+    try:
+        return _get_cached_engine(db_url)
+    except Exception as e:
+        st.session_state["db_err"] = f"Connection error: {e}"
+        return None
 
 
 def load_stats(engine) -> pd.DataFrame:
@@ -490,10 +498,10 @@ body { font-family:'Outfit',sans-serif; overflow:hidden; }
                     unsafe_allow_html=True)
 
         if not db_ok:
-            st.markdown("""
+            err_detail = st.session_state.get("db_err", "Connection string not loaded.")
+            st.markdown(f"""
             <div class='db-warning'>
-              ⚠️ Database not connected — check your Neon connection string in
-              <code>.streamlit/secrets.toml</code>.
+              ⚠️ <strong>Database not connected</strong>: {err_detail}
             </div>
             """, unsafe_allow_html=True)
         elif df_all.empty:
@@ -524,9 +532,9 @@ body { font-family:'Outfit',sans-serif; overflow:hidden; }
             return
 
         if not db_ok:
+            err_detail = st.session_state.get("db_err", "Connection string not loaded.")
             st.error(
-                "⚠️ **Database not configured.** Open `.streamlit/secrets.toml` and "
-                "replace the placeholder URL with your real Neon connection string.",
+                f"⚠️ **Database not connected**: {err_detail}",
                 icon="🔌"
             )
             return
