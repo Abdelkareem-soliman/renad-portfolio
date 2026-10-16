@@ -169,6 +169,10 @@ def get_engine():
         st.session_state["db_err"] = "Database URL still contains placeholder text."
         return None
 
+    # Force psycopg2 driver (Streamlit Cloud doesn't have psycopg3)
+    if db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+
     try:
         return _get_cached_engine(db_url)
     except Exception as e:
